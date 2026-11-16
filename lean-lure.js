@@ -48,11 +48,23 @@ const Lure = {
   },
   // One step towards `destination`; true once there.
   walk(destination, arrival = LURE_ARRIVAL) {
-    if (dist2D(World.pose(), destination) <= arrival) return true;
-    const move = Navigation.next(this, destination, false, arrival);
-    if (move.error && !move.waiting) { this.message = 'Lure: ' + move.error; Hunt.stop(this.message); return false; }
-    if (move.waiting) { this.message = move.error || 'Waiting for the route.'; return false; }
-    if (now() - this.sentAt >= 900 && Cmd.move(move.point)) this.sentAt = now();
+    const pose = World.pose();
+    if (!pose) return false;
+    const distance = dist2D(pose, destination);
+    if (distance <= arrival) return true;
+    if (!Number.isFinite(distance)) {
+      this.message = 'Lure: the pull points or the hunting spot are on another map. Save them again here.';
+      Hunt.stop(this.message);
+      return false;
+    }
+    let point = destination;
+    if (!((pose.regionId | destination.regionId) & DUNGEON)) {
+      const move = Navigation.next(this, destination, false, arrival);
+      if (move.error && !move.waiting) { this.message = 'Lure: ' + move.error; Hunt.stop(this.message); return false; }
+      if (move.waiting) { this.message = move.error || 'Waiting for the route.'; return false; }
+      point = move.point;
+    }
+    if (now() - this.sentAt >= 900 && Cmd.move(point)) this.sentAt = now();
     return false;
   },
   // Strangers within 30 m of the character; party members and the character itself never count.
@@ -182,7 +194,7 @@ const Lure = {
     const options = buff => () => [[0, 'None'], ...UI.learnedSkills(buff).map(s => [s.id, s.name || '#' + s.id])];
     const box = UI.group('Lure',
       UI.check('Lure instead of hunting', () => c().enabled, v => { c().enabled = v; this.reset(); }),
-      el('p', 'For a tank. Walks to each pull point in turn, casts the area taunt there and then the single-target taunt on the nearest monster, brings them back to the hunting spot, pausing on the way so the monsters keep up (0 m = no pauses; none when coming back on low HP), and holds while the party takes over. On the way back the single-target taunt is cast again on a pulled monster that falls more than 10 m behind. Never attacks. The area taunt is never cast on the way or at the spot.', 'muted'),
+      el('p', 'For a tank. Walks to each pull point in turn, casts the area taunt there and then the single-target taunt on the nearest monster, brings them back to the hunting spot, pausing on the way so the monsters keep up (0 m = no pauses; none when coming back on low HP), and holds while the party takes over. On the way back the single-target taunt is cast again on a pulled monster that falls more than 10 m behind. Never attacks. The area taunt is never cast on the way or at the spot. In caves the lure walks in a straight line, so pick pull points you can reach straight from the hunting spot.', 'muted'),
       UI.select('Single-target taunt', options(false), () => this.skill(c().taunt) || 0, pick('taunt')),
       UI.select('Area taunt', options(true), () => this.skill(c().area) || 0, pick('area')),
       UI.number('Hold at the spot (s)', () => c().holdS, v => c().holdS = v, 0, 30),

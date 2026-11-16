@@ -7061,6 +7061,33 @@ test('the lure walks to a pull point, taunts the nearest monster there and never
   assert.equal(f.Lure.phase, 'back'); assert.equal(f.Lure.pulled, true);
   assert.equal(f.commands.some(c => c.kind === 'attack'), false, 'the lure never attacks');
 });
+test('in a cave the lure walks straight to the pull point and taunts there', () => {
+  const { f, step, casts } = lure();
+  const cave = 0x8000 | 0x2a;
+  f.Navigation.scene = null; f.Navigation.error = 'Outdoor collision data required';
+  f.Settings.profile.hunt.center = { regionId: cave, x: 100, y: 0, z: 100 };
+  f.Settings.profile.lure.points = [{ regionId: cave, x: 400, y: 0, z: 100 }];
+  f.Settings.profile.lure.area = { id: 0, group: 0 };
+  f.World.gp.pose = { regionId: cave, x: 100, y: 0, z: 100 };
+  f.World.ents.set(40, { gid: 40, kind: 'monster', name: 'Mob 40', rarity: 0, regionId: cave, x: 410, y: 0, z: 100, attackFlags: 16, appearanceState: [0] });
+  step(); step(); assert.equal(f.Lure.phase, 'out');
+  const move = f.commands.at(-1);
+  assert.equal(move.kind, 'move', 'walks with no collision data');
+  assert.deepEqual([move.destination.regionId, move.destination.x], [cave, 400], 'straight to point A');
+  assert.notEqual(f.Lure.message, 'Outdoor collision data required');
+  f.World.gp.pose = { regionId: cave, x: 400, y: 0, z: 100 }; step(); step();
+  f.World.gp.target = 40; step();
+  assert.equal(casts(3001).length, 1, 'taunts the monster at the point');
+  assert.equal(f.Lure.phase, 'back');
+  step(); assert.equal(f.commands.at(-1).destination.x, 100, 'walks straight back to the hunting spot');
+});
+test('the lure stops with a clear reason when its points are on another map', () => {
+  const { f, step } = lure();
+  f.World.gp.pose = { regionId: 0x8000 | 0x2a, x: 100, y: 0, z: 100 };
+  step(); step();
+  assert.equal(f.Hunt.running, false);
+  assert.match(f.Lure.message, /on another map/);
+});
 test('the lure waits for the next pull while enough monsters are already in the training area', () => {
   const { f, mob, step } = lure();
   f.Settings.profile.lure.stopAt = 2; mob(50, 110); mob(51, 120);
